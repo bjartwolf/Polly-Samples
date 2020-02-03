@@ -14,6 +14,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using NAudio.Midi;
 using PollyDemos;
 using PollyDemos.Async;
 using PollyDemos.OutputHelpers;
@@ -42,11 +43,13 @@ namespace PollyTestClientWpf
         private const string StatisticLabelPrefix = "StatisticLabel";
 
         private Progress<DemoProgress> progress;
+        private MidiIn midiIn;
 
         public MainWindow()
         {
             InitializeComponent();
 
+            ParametersPanel.DataContext = new PollyDemos.PollyParamsVm();
             TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
 
             PlayButton.Click += (sender, args) => PlayButton_Click();
@@ -65,97 +68,204 @@ namespace PollyTestClientWpf
 
                 closingStatistics = progressArgs.Statistics;
             };
+
+            midiIn = new MidiIn(0);
+            midiIn.MessageReceived += MidiInOnMessageReceived;
+            midiIn.ErrorReceived += OnMidiError;
+
+            midiIn.Start();
+        }
+    
+        private void OnMidiError(object sender, MidiInMessageEventArgs e)
+        {
+            throw new NotImplementedException();
         }
 
-        private void TaskScheduler_UnobservedTaskException(object sender, UnobservedTaskExceptionEventArgs e)
+        private void MidiInOnMessageReceived(object sender, MidiInMessageEventArgs e)
         {
-            Output.Dispatcher.Invoke(() =>
+            var evt = MidiEvent.FromRawMessage(e.RawMessage);
+            if (evt is ControlChangeEvent ctrlEvent)
             {
-                StopButton_Click();
-                WriteLineInColor($"Unobserved task exception: {e.Exception.Flatten()}.", Color.Red);
-            });
-
-            e.SetObserved();
+                if ((int) ctrlEvent.Controller == 19)
+                {
+                    
+                    Dispatcher.BeginInvoke((Action)(() =>
+                    {
+                        var foo = MidiInput.DataContext as PollyDemos.PollyParamsVm;
+                        foo.WaitTime.InputValue = ctrlEvent.ControllerValue;
+                    }));
+                }
+            }
         }
 
-        private static Type GetDemoType(string demoName)
-        {
-            return availableDemoTypes.SingleOrDefault(t => t.Name == demoName);
-        }
-
-        private void ClearButton_Click()
-        {
-            Output.Document = new FlowDocument();
-            UpdateStatistics(new Statistic[0]);
-        }
-
-        private void PlayButton_Click()
-        {
-            StopButton.IsEnabled = true;
-            PlayButton.IsEnabled = false;
-
-            cancellationSource = new CancellationTokenSource();
-
-            cancellationToken = cancellationSource.Token;
-
-            var selectedItem = Demo.SelectedItem as ComboBoxItem;
-            if (selectedItem == null)
+            private void TaskScheduler_UnobservedTaskException(object sender, UnobservedTaskExceptionEventArgs e)
             {
-                WriteLineInColor("No demo selected.", Color.Red);
-                cancellationSource.Cancel();
-                return;
+                Output.Dispatcher.Invoke(() =>
+                {
+                    StopButton_Click();
+                    WriteLineInColor($"Unobserved task exception: {e.Exception.Flatten()}.", Color.Red);
+                });
+
+                e.SetObserved();
             }
 
-            var demoName = selectedItem.Name;
-            var demoType = GetDemoType(demoName);
-            if (demoType == null)
+            private static Type GetDemoType(string demoName)
             {
-                WriteLineInColor($"Unable to identify demo: {demoName}", Color.Red);
-                cancellationSource.Cancel();
+                return availableDemoTypes.SingleOrDefault(t => t.Name == demoName);
             }
-            else if (demoType.IsSubclassOf(typeof(SyncDemo)))
-            {
-                SyncDemo demoInstance;
-                try
-                {
-                    demoInstance = Activator.CreateInstance(demoType) as SyncDemo;
-                }
-                catch (Exception)
-                {
-                    demoInstance = null;
-                }
 
-                if (demoInstance == null)
+            private void ClearButton_Click()
+            {
+                Output.Document = new FlowDocument();
+                UpdateStatistics(new Statistic[0]);
+            }
+
+            private void PlayButton_Click()
+            {
+                StopButton.IsEnabled = true;
+                PlayButton.IsEnabled = false;
+
+                cancellationSource = new CancellationTokenSource();
+
+                cancellationToken = cancellationSource.Token;
+
+                var selectedItem = Demo.SelectedItem as ComboBoxItem;
+                if (selectedItem == null)
                 {
-                    WriteLineInColor($"Unable to instantiate demo: {demoName}", Color.Red);
+                    WriteLineInColor("No demo selected.", Color.Red);
                     cancellationSource.Cancel();
                     return;
                 }
 
-                try
+                var demoName = selectedItem.Name;
+                var demoType = GetDemoType(demoName);
+                if (demoType == null)
                 {
-                    Task.Factory.StartNew(() => demoInstance.Execute(cancellationToken, progress), cancellationToken,
+                    WriteLineInColor($"Unable to identify demo: {demoName}", Color.Red);
+                    cancellationSource.Cancel();
+                }
+                else if (demoType.IsSubclassOf(typeof(SyncDemo)))
+                {
+                    SyncDemo demoInstance;
+                    try
+                    {
+                        demoInstance = Activator.CreateInstance(demoType) as SyncDemo;
+                    }
+                    catch (Exception)
+                    {
+                        demoInstance = null;
+                    }
+
+                    if (demoInstance == null)
+                    {
+                        WriteLineInColor($"Unable to instantiate demo: {demoName}", Color.Red);
+                        cancellationSource.Cancel();
+                        return;
+                    }
+
+                    try
+                    {
+                        Task.Factory.StartNew(() => demoInstance.Execute(cancellationToken, progress), cancellationToken,
+                                TaskCreationOptions.LongRunning, TaskScheduler.Default)
+                            .ContinueWith(t =>
+                            {
+                                if (t.IsCanceled)
+                                    WriteLineInColor($"Demo was canceled: {demoName}", Color.Red);
+                                else if (t.IsFaulted)
+                                    WriteLineInColor($"Demo {demoName} threw exception: {t.Exception.ToString()}",
+                                        Color.Red);
+                            }, CancellationToken.None, TaskContinuationOptions.NotOnRanToCompletion, TaskScheduler.Default);
+                    }
+                    catch (Exception e)
+                    {
+                        WriteLineInColor($"Demo {demoName} threw exception: {e}", Color.Red);
+                    }
+                }
+                else if (demoType.IsSubclassOf(typeof(AsyncDemo)))
+                {
+                    AsyncDemo demoInstance;
+                    try
+                    {
+                        demoInstance = Activator.CreateInstance(demoType) as AsyncDemo;
+                    }
+                    catch (Exception)
+                    {
+                        demoInstance = null;
+                    }
+
+                    if (demoInstance == null)
+                    {
+                        WriteLineInColor($"Unable to instantiate demo: {demoName}", Color.Red);
+                        cancellationSource.Cancel();
+                        return;
+                    }
+
+                    Task.Factory.StartNew(() => demoInstance.ExecuteAsync(cancellationToken, progress), cancellationToken,
                             TaskCreationOptions.LongRunning, TaskScheduler.Default)
+                        .Unwrap()
                         .ContinueWith(t =>
                         {
                             if (t.IsCanceled)
                                 WriteLineInColor($"Demo was canceled: {demoName}", Color.Red);
                             else if (t.IsFaulted)
-                                WriteLineInColor($"Demo {demoName} threw exception: {t.Exception.ToString()}",
-                                    Color.Red);
+                                WriteLineInColor($"Demo {demoName} threw exception: {t.Exception.ToString()}", Color.Red);
                         }, CancellationToken.None, TaskContinuationOptions.NotOnRanToCompletion, TaskScheduler.Default);
                 }
-                catch (Exception e)
+                else
                 {
-                    WriteLineInColor($"Demo {demoName} threw exception: {e}", Color.Red);
+                    WriteLineInColor($"Unable to identify demo as either sync or async demo: {demoName}", Color.Red);
+                    cancellationSource.Cancel();
                 }
             }
-            else if (demoType.IsSubclassOf(typeof(AsyncDemo)))
+
+            private void StopButton_Click()
             {
-                AsyncDemo demoInstance;
+                StopButton.IsEnabled = false;
+                PlayButton.IsEnabled = true;
+
+                if (cancellationSource == null)
+                {
+                    WriteLineInColor($"No demo currently running.", Color.Red);
+                    return;
+                }
+
                 try
                 {
-                    demoInstance = Activator.CreateInstance(demoType) as AsyncDemo;
+                    cancellationSource.Cancel();
+                }
+                catch (ObjectDisposedException)
+                {
+                    WriteLineInColor($"Demo already stopped.", Color.Red);
+                    return;
+                }
+
+                // Output closing statistics.
+                if (closingStatistics.Any())
+                {
+                    int longestDescription = closingStatistics.Max(s => s.Description.Length);
+                    foreach (Statistic stat in closingStatistics)
+                        WriteLineInColor(stat.Description.PadRight(longestDescription) + ": " + stat.Value, stat.Color);
+                }
+
+                cancellationSource.Dispose();
+            }
+
+            private void Demo_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+            {
+                var comboBox = sender as ComboBox;
+
+                var demoName = (comboBox.SelectedItem as ComboBoxItem).Name;
+                var demoType = GetDemoType(demoName);
+                if (demoType == null)
+                {
+                    Description.Text = string.Empty;
+                    return;
+                }
+
+                DemoBase demoInstance;
+                try
+                {
+                    demoInstance = Activator.CreateInstance(demoType) as DemoBase;
                 }
                 catch (Exception)
                 {
@@ -164,155 +274,76 @@ namespace PollyTestClientWpf
 
                 if (demoInstance == null)
                 {
-                    WriteLineInColor($"Unable to instantiate demo: {demoName}", Color.Red);
-                    cancellationSource.Cancel();
+                    Description.Text = string.Empty;
                     return;
                 }
 
-                Task.Factory.StartNew(() => demoInstance.ExecuteAsync(cancellationToken, progress), cancellationToken,
-                        TaskCreationOptions.LongRunning, TaskScheduler.Default)
-                    .Unwrap()
-                    .ContinueWith(t =>
-                    {
-                        if (t.IsCanceled)
-                            WriteLineInColor($"Demo was canceled: {demoName}", Color.Red);
-                        else if (t.IsFaulted)
-                            WriteLineInColor($"Demo {demoName} threw exception: {t.Exception.ToString()}", Color.Red);
-                    }, CancellationToken.None, TaskContinuationOptions.NotOnRanToCompletion, TaskScheduler.Default);
-            }
-            else
-            {
-                WriteLineInColor($"Unable to identify demo as either sync or async demo: {demoName}", Color.Red);
-                cancellationSource.Cancel();
-            }
-        }
-
-        private void StopButton_Click()
-        {
-            StopButton.IsEnabled = false;
-            PlayButton.IsEnabled = true;
-
-            if (cancellationSource == null)
-            {
-                WriteLineInColor($"No demo currently running.", Color.Red);
-                return;
+                Description.Text = demoInstance.Description;
             }
 
-            try
+            public void WriteMultiLineInColor(ColoredMessage[] messages)
             {
-                cancellationSource.Cancel();
-            }
-            catch (ObjectDisposedException)
-            {
-                WriteLineInColor($"Demo already stopped.", Color.Red);
-                return;
-            }
+                Output.Dispatcher.Invoke(() =>
+                {
+                    foreach (ColoredMessage message in messages)
+                        lock (lockObject
+                        ) // Locking helps avoid the color of one message leaking onto another, in multi-threaded callbacks.
+                        {
+                            var newText = new TextRange(Output.Document.ContentEnd, Output.Document.ContentEnd)
+                            {
+                                Text = message.Message + "\n"
+                            };
+                            newText.ApplyPropertyValue(TextElement.ForegroundProperty, message.Color.ToBrushColor());
+                        }
 
-            // Output closing statistics.
-            if (closingStatistics.Any())
-            {
-                int longestDescription = closingStatistics.Max(s => s.Description.Length);
-                foreach (Statistic stat in closingStatistics)
-                    WriteLineInColor(stat.Description.PadRight(longestDescription) + ": " + stat.Value, stat.Color);
-            }
-
-            cancellationSource.Dispose();
-        }
-
-        private void Demo_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            var comboBox = sender as ComboBox;
-
-            var demoName = (comboBox.SelectedItem as ComboBoxItem).Name;
-            var demoType = GetDemoType(demoName);
-            if (demoType == null)
-            {
-                Description.Text = string.Empty;
-                return;
+                    Output.ScrollToEnd();
+                });
             }
 
-            DemoBase demoInstance;
-            try
+            public void WriteLineInColor(string msg, Color color)
             {
-                demoInstance = Activator.CreateInstance(demoType) as DemoBase;
-            }
-            catch (Exception)
-            {
-                demoInstance = null;
-            }
-
-            if (demoInstance == null)
-            {
-                Description.Text = string.Empty;
-                return;
-            }
-
-            Description.Text = demoInstance.Description;
-        }
-
-        public void WriteMultiLineInColor(ColoredMessage[] messages)
-        {
-            Output.Dispatcher.Invoke(() =>
-            {
-                foreach (ColoredMessage message in messages)
+                Output.Dispatcher.Invoke(() =>
+                {
                     lock (lockObject
                     ) // Locking helps avoid the color of one message leaking onto another, in multi-threaded callbacks.
                     {
                         var newText = new TextRange(Output.Document.ContentEnd, Output.Document.ContentEnd)
                         {
-                            Text = message.Message + "\n"
+                            Text = msg + "\n"
                         };
-                        newText.ApplyPropertyValue(TextElement.ForegroundProperty, message.Color.ToBrushColor());
+                        newText.ApplyPropertyValue(TextElement.ForegroundProperty, color.ToBrushColor());
+                        Output.ScrollToEnd();
                     }
+                });
+            }
 
-                Output.ScrollToEnd();
-            });
-        }
-
-        public void WriteLineInColor(string msg, Color color)
-        {
-            Output.Dispatcher.Invoke(() =>
+            private void UpdateStatistics(Statistic[] stats)
             {
-                lock (lockObject
-                ) // Locking helps avoid the color of one message leaking onto another, in multi-threaded callbacks.
+                Output.Dispatcher.Invoke(() =>
                 {
-                    var newText = new TextRange(Output.Document.ContentEnd, Output.Document.ContentEnd)
+                    var statisticsToShow = stats.Length;
+                    for (var i = 0; i < MaxStatisticsToShow; i++)
                     {
-                        Text = msg + "\n"
-                    };
-                    newText.ApplyPropertyValue(TextElement.ForegroundProperty, color.ToBrushColor());
-                    Output.ScrollToEnd();
-                }
-            });
-        }
+                        var statSuffix = $"{i:00}";
+                        var label = (Label) FindName(StatisticLabelPrefix + statSuffix);
+                        var statBox = (TextBox) FindName(StatisticBoxPrefix + statSuffix);
 
-        private void UpdateStatistics(Statistic[] stats)
-        {
-            Output.Dispatcher.Invoke(() =>
-            {
-                var statisticsToShow = stats.Length;
-                for (var i = 0; i < MaxStatisticsToShow; i++)
-                {
-                    var statSuffix = $"{i:00}";
-                    var label = (Label) FindName(StatisticLabelPrefix + statSuffix);
-                    var statBox = (TextBox) FindName(StatisticBoxPrefix + statSuffix);
-
-                    if (i < statisticsToShow)
-                    {
-                        Statistic statistic = stats[i];
-                        label.Content = statistic.Description;
-                        statBox.Foreground = statistic.Color.ToBrushColor();
-                        statBox.Text = statistic.Value.ToString().PadLeft(3);
-                        label.Visibility = Visibility.Visible;
-                        statBox.Visibility = Visibility.Visible;
+                        if (i < statisticsToShow)
+                        {
+                            Statistic statistic = stats[i];
+                            label.Content = statistic.Description;
+                            statBox.Foreground = statistic.Color.ToBrushColor();
+                            statBox.Text = statistic.Value.ToString().PadLeft(3);
+                            label.Visibility = Visibility.Visible;
+                            statBox.Visibility = Visibility.Visible;
+                        }
+                        else
+                        {
+                            label.Visibility = Visibility.Hidden;
+                            statBox.Visibility = Visibility.Hidden;
+                        }
                     }
-                    else
-                    {
-                        label.Visibility = Visibility.Hidden;
-                        statBox.Visibility = Visibility.Hidden;
-                    }
-                }
-            });
-        }
+                });
+            }
     }
 }

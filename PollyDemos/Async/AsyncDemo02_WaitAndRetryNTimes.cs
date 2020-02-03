@@ -35,22 +35,6 @@ namespace PollyDemos.Async
             retries = 0;
             eventualFailures = 0;
 
-            progress.Report(ProgressWithMessage(typeof(AsyncDemo02_WaitAndRetryNTimes).Name));
-            progress.Report(ProgressWithMessage("======"));
-            progress.Report(ProgressWithMessage(string.Empty));
-
-            // Define our policy:
-            var policy = Policy.Handle<Exception>().WaitAndRetryAsync(
-                3, // Retry 3 times
-                attempt => TimeSpan.FromMilliseconds(200), // Wait 200ms between each try.
-                (exception, calculatedWaitDuration) => // Capture some info for logging!
-                {
-                    // This is your new exception handler! 
-                    // Tell the user what they've won!
-                    progress.Report(ProgressWithMessage("Policy logging: " + exception.Message, Color.Yellow));
-                    retries++;
-                });
-
             using (var client = new HttpClient())
             {
                 totalRequests = 0;
@@ -59,6 +43,21 @@ namespace PollyDemos.Async
                 // Do the following until a key is pressed
                 while (!internalCancel && !cancellationToken.IsCancellationRequested)
                 {
+            // Define our policy:
+                    progress.Report(ProgressWithMessage(typeof(AsyncDemo02_WaitAndRetryNTimes).Name));
+                    progress.Report(ProgressWithMessage("WaitTime: " + PollyParameters.WaitTime));
+
+                    var policy = Policy.Handle<Exception>().WaitAndRetryAsync(
+                        3, // Retry 3 times
+                        attempt => TimeSpan.FromMilliseconds(PollyParameters.WaitTime), // Wait 200ms between each try.
+                        (exception, calculatedWaitDuration) => // Capture some info for logging!
+                        {
+                            // This is your new exception handler! 
+                            // Tell the user what they've won!
+                            progress.Report(ProgressWithMessage("Policy logging: " + exception.Message, Color.Yellow));
+                            retries++;
+                        });
+
                     totalRequests++;
 
                     try
