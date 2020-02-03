@@ -86,15 +86,18 @@ namespace PollyTestClientWpf
             var evt = MidiEvent.FromRawMessage(e.RawMessage);
             if (evt is ControlChangeEvent ctrlEvent)
             {
-                if ((int) ctrlEvent.Controller == 19)
+
+                Dispatcher.BeginInvoke((Action) (() =>
                 {
-                    
-                    Dispatcher.BeginInvoke((Action)(() =>
+                    var foo = ParametersPanel.DataContext as PollyDemos.PollyParamsVm;
+                    if ((int) ctrlEvent.Controller == 19)
                     {
-                        var foo = MidiInput.DataContext as PollyDemos.PollyParamsVm;
-                        foo.WaitTime.InputValue = ctrlEvent.ControllerValue;
-                    }));
-                }
+                        foo.WaitTime.InputValue = ctrlEvent.ControllerValue * 5 +10;
+                    } else if ((int) ctrlEvent.Controller == 23)
+                    {
+                        foo.RetryCount.InputValue = (ctrlEvent.ControllerValue / 10);
+                    }
+                 }));
             }
         }
 

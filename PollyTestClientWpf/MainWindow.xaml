@@ -136,17 +136,31 @@
                  Padding="8" Foreground="#002C46" Background="#FFFFFF" Margin="1522,590,-1195,0" TextWrapping="Wrap"
                  HorizontalContentAlignment="Right" VerticalAlignment="Top" Height="40" Width="60" FontSize="18"
                  FontFamily="Consolas" />
-        <StackPanel HorizontalAlignment="Left" Margin="106,683,0,0" Orientation="Vertical" VerticalAlignment="Top" x:Name="ParametersPanel" >
+        <StackPanel HorizontalAlignment="Left" Margin="106,649,0,0" Orientation="Horizontal" VerticalAlignment="Top" x:Name="ParametersPanel" Height="145" >
+            <StackPanel HorizontalAlignment="Left" Orientation="Vertical" VerticalAlignment="Top"  >
+                <TextBlock Height="37" Text="Wait time:" TextWrapping="Wrap" Width="156" Foreground="White"/>
+                <StackPanel HorizontalAlignment="Left"  Orientation="Horizontal" VerticalAlignment="Top" >
+                    <TextBlock Height="37" Text="MidiInput:" TextWrapping="Wrap" Width="156" Foreground="White"/>
+                    <TextBlock  Height="37" Text="{Binding WaitTime.InputValue}" TextWrapping="Wrap" Width="156" Foreground="White" FontSize="24"/>
+                </StackPanel>
+                <StackPanel HorizontalAlignment="Left"  Orientation="Horizontal" VerticalAlignment="Top" >
+                    <TextBlock Height="37" Text="UsedInSiulation:" TextWrapping="Wrap" Width="156" Foreground="White"/>
+                    <TextBlock Height="37" Text="{Binding WaitTime.UsedInSimulation}" TextWrapping="Wrap" Width="156" Foreground="White" FontSize="24"/>
+                </StackPanel>
+            </StackPanel>
+            <StackPanel HorizontalAlignment="Left" Orientation="Vertical" VerticalAlignment="Top"  >
+                <TextBlock Height="37" Text="Retries:" TextWrapping="Wrap" Width="156" Foreground="White"/>
+                <StackPanel HorizontalAlignment="Left"  Orientation="Horizontal" VerticalAlignment="Top" >
+                    <TextBlock Height="37" Text="MidiInput:" TextWrapping="Wrap" Width="156" Foreground="White"/>
+                    <TextBlock  Height="37" Text="{Binding RetryCount.InputValue}" TextWrapping="Wrap" Width="156" Foreground="White" FontSize="24"/>
+                </StackPanel>
+                <StackPanel HorizontalAlignment="Left"  Orientation="Horizontal" VerticalAlignment="Top" >
+                    <TextBlock Height="37" Text="UsedInSiulation:" TextWrapping="Wrap" Width="156" Foreground="White"/>
+                    <TextBlock Height="37" Text="{Binding RetryCount.UsedInSimulation}" TextWrapping="Wrap" Width="156" Foreground="White" FontSize="24"/>
+                </StackPanel>
+            </StackPanel>
 
-            <TextBlock Height="37" Text="Wait time:" TextWrapping="Wrap" Width="156" Foreground="White"/>
-        <StackPanel HorizontalAlignment="Left"  Orientation="Horizontal" VerticalAlignment="Top" >
-            <TextBlock Height="37" Text="MidiInput:" TextWrapping="Wrap" Width="156" Foreground="White"/>
-            <TextBlock x:Name="MidiInput" Height="37" Text="{Binding WaitTime.InputValue}" TextWrapping="Wrap" Width="156" Foreground="White"/>
-        </StackPanel>
-        <StackPanel HorizontalAlignment="Left"  Orientation="Horizontal" VerticalAlignment="Top" >
-            <TextBlock Height="37" Text="UsedInSiulation:" TextWrapping="Wrap" Width="156" Foreground="White"/>
-             <TextBlock x:Name="MidiInput1" Height="37" Text="{Binding WaitTime.UsedInSimulation}" TextWrapping="Wrap" Width="156" Foreground="White"/>
-        </StackPanel>
+
         </StackPanel>
     </Grid>
 </Window>

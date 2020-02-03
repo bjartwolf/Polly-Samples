@@ -46,9 +46,10 @@ namespace PollyDemos.Async
             // Define our policy:
                     progress.Report(ProgressWithMessage(typeof(AsyncDemo02_WaitAndRetryNTimes).Name));
                     progress.Report(ProgressWithMessage("WaitTime: " + PollyParameters.WaitTime));
+                    progress.Report(ProgressWithMessage("RetryCount: " + PollyParameters.RetryCount));
 
                     var policy = Policy.Handle<Exception>().WaitAndRetryAsync(
-                        3, // Retry 3 times
+                        PollyParameters.RetryCount, // Retry 3 times
                         attempt => TimeSpan.FromMilliseconds(PollyParameters.WaitTime), // Wait 200ms between each try.
                         (exception, calculatedWaitDuration) => // Capture some info for logging!
                         {
